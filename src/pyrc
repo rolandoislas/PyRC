@@ -1,0 +1,32 @@
+import os
+
+import time
+
+from src.data.args import Args
+from src.util.InputHandler import InputHandler
+from src.util.Irc import Irc
+from src.util.logger import Logger
+
+
+class PyRc:
+    def __init__(self):
+        self.irc = Irc()
+        self.input_handler = InputHandler(self.irc)
+
+    def run(self):
+        self.irc.connect()
+        self.irc.listen()
+        self.input_handler.listen()
+        while self.irc.is_running() and self.input_handler.is_running():
+            try:
+                time.sleep(1000)
+            except KeyboardInterrupt:
+                self.irc.stop()
+                self.input_handler.stop()
+
+
+if __name__ == '__main__':
+    Args.parse_args()
+    Logger.set_level(Args.args.log)
+    pyrc = PyRc()
+    pyrc.run()

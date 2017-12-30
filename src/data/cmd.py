@@ -1,0 +1,21 @@
+import re
+
+# IRC Commands
+
+PASS = "PASS"
+NICK = "NICK"
+JOIN = "JOIN"
+PING = "PING"
+PONG = "PONG"
+PRIVMSG = "PRIVMSG"
+PART = "PART"
+MOTD_START = "RPL_MOTDSTART"
+MOTD_START_D = "375"
+MOTD = "RPL_MOTD"
+MOTD_D = "372"
+MOTD_END = "RPL_ENDOFMOTD"
+MOTD_END_D = "376"
+
+# Twitch? Specific Commands
+
+MOTD_TWITCH = re.compile("00[1-4]")
