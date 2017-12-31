@@ -15,6 +15,7 @@ MOTD = "RPL_MOTD"
 MOTD_D = "372"
 MOTD_END = "RPL_ENDOFMOTD"
 MOTD_END_D = "376"
+CAP = "CAP"
 
 # Twitch? Specific Commands
 

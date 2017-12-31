@@ -17,10 +17,14 @@ class Irc:
         self.running = False
         self.channel = None
         params_regex = "(\s(?:(?::(.*))|(?:([^\s]+))))"
+        twitch_tag_regex = "([^\s;=]+=[^\s;]*)"
+        twitch_tags_regex = "(?:@((?:$TWITCH_TAG;?)+)\s)?".replace("$TWITCH_TAG", twitch_tag_regex)
         self.params_regex = re.compile(params_regex)
+        self.twitch_tag_regex = re.compile(twitch_tag_regex)
+        self.twitch_tags_regex = re.compile(twitch_tags_regex)
         self.message_regex = re.compile(
-            "^(?::([^!@\s]+)(?:!([^@\s]+))?(?:@([^\s]+))?\s)?([A-Za-z0-9]+)($PARAMS+)(?:\r?\n?)".replace("$PARAMS",
-                                                                                                         params_regex))
+            "^$TWITCH_TAGS(?::([^!@\s]+)(?:!([^@\s]+))?(?:@([^\s]+))?\s)?([A-Za-z0-9]+)($PARAMS+)?(?:\r?\n?)"
+                .replace("$PARAMS", params_regex).replace("$TWITCH_TAGS", twitch_tags_regex))
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listen_thread = Thread(target=self._listen)
         self.listen_thread.setDaemon(True)
@@ -33,6 +37,7 @@ class Irc:
         """
         self.socket.connect((Args.args.server, 6667))
         Logger.info("Connected to %s", Args.args.server)
+        self.cmd(CAP, "REQ", "twitch.tv/tags")
         self.cmd(PASS, Args.args.password)
         self.cmd(NICK, Args.args.user_name)
 
@@ -81,13 +86,15 @@ class Irc:
         groups = match.groups()
         for group in groups:
             Logger.verbose(group)
+        print("")
         message = {
-            "server_name": groups[0],
-            "nick": groups[0],
-            "user": groups[1],
-            "host": groups[2],
-            "command": groups[3],
-            "params": self.parse_params(groups[4])
+            "twitch_tags": self.parse_twitch_tags(groups[0]),
+            "server_name": groups[2],
+            "nick": groups[2],
+            "user": groups[3],
+            "host": groups[4],
+            "command": groups[5],
+            "params": self.parse_params(groups[6]),
         }
         return message
 
@@ -101,7 +108,18 @@ class Irc:
         if message["command"] == PING:
             self.cmd(PONG, message["params"][0])
         elif message["command"] == PRIVMSG:
-            self.print_message(message["nick"], message["params"][1])
+            name = message["nick"]
+            if "display-name" in message["twitch_tags"] and message["twitch_tags"]["display-name"]:
+                name = message["twitch_tags"]["display-name"]
+            if "badges" in message["twitch_tags"] and "broadcaster" in message["twitch_tags"]["badges"]:
+                name = "[%s]" % name
+            if "mod" in message["twitch_tags"] and message["twitch_tags"]["mod"] == "1":
+                name = "[M] " + name
+            if "subscriber" in message["twitch_tags"] and message["twitch_tags"]["subscriber"] == "1":
+                name = "[S] " + name
+            if "turbo" in message["twitch_tags"] and message["twitch_tags"]["turbo"] == "1":
+                name = "[T] " + name
+            self.print_message(name, message["params"][1])
         elif MOTD_TWITCH.match(message["command"]) or message["command"] == MOTD_START_D or \
                 message["command"] == MOTD_D or message["command"] == MOTD_END_D:
             self.print_message("[%s]" % message["nick"], message["params"][1])
@@ -117,11 +135,15 @@ class Irc:
         :return: list
         """
         params = []
+        if not param_string:
+            return params
         matches = self.params_regex.finditer(param_string)
         if not matches:
-            return None
+            return params
         for match in matches:
             groups = match.groups()
+            if len(groups) < 3:
+                continue
             if groups[1]:
                 params.append(groups[1])
             elif groups[2]:
@@ -187,3 +209,25 @@ class Irc:
         self.channel = channel
         if self.channel:
             self.cmd(JOIN, self.channel)
+
+    def parse_twitch_tags(self, tags_string):
+        """
+        Parse twitch tags string into a dictionary
+        :param tags_string: tags
+        :return: tag dict
+        """
+        tags = {}
+        if not tags_string:
+            return tags
+        matches = self.twitch_tag_regex.finditer(tags_string)
+        if not matches:
+            return tags
+        for match in matches:
+            groups = match.groups()
+            if len(groups) < 1:
+                continue
+            if groups[0]:
+                Logger.verbose("TAG: %s", groups[0])
+                tag = groups[0].split("=")
+                tags[tag[0]] = tag[1]
+        return tags
